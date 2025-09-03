@@ -235,31 +235,31 @@ pub mod pallet {
 			multisig_id: MultisigId,
 			call: Box<<T as Config>::RuntimeCall>,
 		) -> DispatchResult {
-			/// Check that the extrinsic was signed and get the signer.
+			// Check that the extrinsic was signed and get the signer.
 			let who = ensure_signed(origin)?;
-			/// Ensure the multisig exists and that the signer is a valid owner.
+			// Ensure the multisig exists and that the signer is a valid owner.
 			let multisig = Self::multisigs(multisig_id).ok_or(Error::<T>::MultisigNotFound)?;
 			ensure!(multisig.owners.contains(&who), Error::<T>::NotAnOwner);
 
-			/// Generate a new, unique index for this proposal within the scope of the multisig.
+			// Generate a new, unique index for this proposal within the scope of the multisig.
 			let proposal_index = Self::next_proposal_index(multisig_id);
 			NextProposalIndex::<T>::insert(
 				multisig_id,
 				proposal_index.checked_add(1).ok_or(Error::<T>::StorageOverflow)?,
 			);
 
-			/// Calculate the hash of the call for storage optimization instead of storing the full
-			/// call.
+			// Calculate the hash of the call for storage optimization instead of storing the full
+			// call.
 			let call_hash = blake2_256(&call.encode());
 			let new_proposal = Proposal { call_hash, executed: false };
 			<Proposals<T>>::insert(multisig_id, proposal_index, new_proposal);
 
-			/// The submitter automatically confirms their own proposal.
+			// The submitter automatically confirms their own proposal.
 			let mut approvals = BoundedVec::new();
 			approvals.try_push(who.clone()).map_err(|_| Error::<T>::TooManyOwners)?;
 			<Approvals<T>>::insert(multisig_id, proposal_index, approvals);
 
-			/// Emit an event to notify users of the new proposal.
+			// Emit an event to notify users of the new proposal.
 			Self::deposit_event(Event::ProposalSubmitted {
 				multisig_id,
 				proposal_index,

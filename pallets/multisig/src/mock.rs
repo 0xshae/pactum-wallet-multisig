@@ -1,5 +1,6 @@
 use crate as pallet_multisig;
 use frame::runtime::prelude::*;
+
 use frame_support::{
 	derive_impl,
 	traits::{ConstU128, ConstU16, ConstU32, ConstU64},
