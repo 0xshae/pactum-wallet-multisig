@@ -96,6 +96,20 @@ pub mod pallet {
 	pub type Multisigs<T: Config> =
 		StorageMap<_, Blake2_128Concat, MultisigId, Multisig<T::AccountId, T::MaxOwners>>;
 
+	#[pallet::storage]
+    #[pallet::getter(fn proposals)]
+    pub type Proposals<T: Config> = StorageDoubleMap<_, Blake2_128Concat, MultisigId, Blake2_128Concat, ProposalIndex, Proposal>;
+
+
+    #[pallet::storage]
+    #[pallet::getter(fn next_proposal_index)]
+    pub type NextProposalIndex<T: Config> = StorageMap<_, Blake2_128Concat, MultisigId, ProposalIndex, ValueQuery>;
+
+
+    #[pallet::storage]
+    #[pallet::getter(fn approvals)]
+    pub type Approvals<T: Config> = StorageDoubleMap<_, Blake2_128Concat, MultisigId, Blake2_128Concat, ProposalIndex, BoundedVec<T::AccountId, T::MaxOwners>, ValueQuery>;
+
 	//EVENTS
 
 	#[pallet::event]
