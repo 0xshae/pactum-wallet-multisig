@@ -18,7 +18,7 @@ pub use weight::WeightInfo;
 pub mod pallet {
 	use super::*;
 	use frame_support::{dispatch::GetDispatchInfo, pallet_prelude::*, traits::ReservableCurrency};
-	use frame_system::pallet_prelude::*;
+	use frame_system::{pallet_prelude::*, RawOrigin};
 	use sp_io::hashing::blake2_256;
 	use sp_runtime::traits::{Dispatchable, TrailingZeroInput};
 	use sp_std::prelude::*;
@@ -143,6 +143,11 @@ pub mod pallet {
 			multisig_id: MultisigId,
 			proposal_index: ProposalIndex,
 		},
+		ProposalExecuted {
+			multisig_id: MultisigId,
+			proposal_index: ProposalIndex,
+			result: DispatchResult,
+		},
 	}
 
 	// ERRORS
@@ -161,6 +166,9 @@ pub mod pallet {
 		ProposalNotFound,
 		AlreadyExecuted,
 		AlreadyConfirmed,
+		MustBeMultisig,
+		CallHashMismatch,
+		NotEnoughApprovals,
 	}
 
 	//CALLS
@@ -297,6 +305,43 @@ pub mod pallet {
 			<Approvals<T>>::insert(multisig_id, proposal_index, approvals);
 
 			Self::deposit_event(Event::Confirmation { who, multisig_id, proposal_index });
+			Ok(())
+		}
+
+		#[pallet::call_index(3)]
+		#[pallet::weight(T::WeightInfo::execute_proposal())]
+		pub fn execute_proposal(
+			origin: OriginFor<T>,
+			multisig_id: MultisigId,
+			proposal_index: ProposalIndex,
+			call: Box<<T as Config>::RuntimeCall>,
+		) -> DispatchResult {
+			let _who = ensure_signed(origin)?;
+			let multisig = Self::multisigs(multisig_id).ok_or(Error::<T>::MultisigNotFound)?;
+			let mut proposal =
+				Self::proposals(multisig_id, proposal_index).ok_or(Error::<T>::ProposalNotFound)?;
+			ensure!(!proposal.executed, Error::<T>::AlreadyExecuted);
+
+			let call_hash = blake2_256(&call.encode());
+			ensure!(proposal.call_hash == call_hash, Error::<T>::CallHashMismatch);
+
+			let approvals = Self::approvals(multisig_id, proposal_index);
+			ensure!(approvals.len() as u32 >= multisig.threshold, Error::<T>::NotEnoughApprovals);
+
+			let multisig_account = Self::multi_account_id(multisig_id);
+			let result = call.dispatch(RawOrigin::Signed(multisig_account).into());
+
+			// Only mark as executed if the dispatch was successful
+			if result.is_ok() {
+				proposal.executed = true;
+				<Proposals<T>>::insert(multisig_id, proposal_index, proposal);
+			}
+
+			Self::deposit_event(Event::ProposalExecuted {
+				multisig_id,
+				proposal_index,
+				result: result.map(|_| ()).map_err(|e| e.error),
+			});
 			Ok(())
 		}
 	}
