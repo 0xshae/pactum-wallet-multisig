@@ -214,56 +214,59 @@ pub mod pallet {
 
 			Ok(())
 		}
+		/// Submits a new proposal for a multisig wallet to execute.
+		///
+		/// This extrinsic can only be called by an owner of the specified multisig.
+		/// It creates a new proposal record, storing the hash of the `call` to be
+		/// executed. The submitter's account is automatically added as the first
+		/// confirmation for the proposal.
+		///
+		/// ### Parameters:
+		/// - `origin`: The signed account of the multisig owner submitting the proposal.
+		/// - `multisig_id`: The ID of the multisig for which the proposal is being made.
+		/// - `call`: The `RuntimeCall` that the multisig owners will vote on to execute.
+		///
+		/// ### Emits:
+		/// - `ProposalSubmitted` on successful submission.
+		#[pallet::call_index(1)]
+		#[pallet::weight(T::WeightInfo::submit_proposal())]
+		pub fn submit_proposal(
+			origin: OriginFor<T>,
+			multisig_id: MultisigId,
+			call: Box<<T as Config>::RuntimeCall>,
+		) -> DispatchResult {
+			/// Check that the extrinsic was signed and get the signer.
+			let who = ensure_signed(origin)?;
+			/// Ensure the multisig exists and that the signer is a valid owner.
+			let multisig = Self::multisigs(multisig_id).ok_or(Error::<T>::MultisigNotFound)?;
+			ensure!(multisig.owners.contains(&who), Error::<T>::NotAnOwner);
 
-	/// Submits a new proposal for a multisig wallet to execute.
-        ///
-        /// This extrinsic can only be called by an owner of the specified multisig.
-        /// It creates a new proposal record, storing the hash of the `call` to be
-        /// executed. The submitter's account is automatically added as the first
-        /// confirmation for the proposal.
-        ///
-        /// ### Parameters:
-        /// - `origin`: The signed account of the multisig owner submitting the proposal.
-        /// - `multisig_id`: The ID of the multisig for which the proposal is being made.
-        /// - `call`: The `RuntimeCall` that the multisig owners will vote on to execute.
-        ///
-        /// ### Emits:
-        /// - `ProposalSubmitted` on successful submission.
-        #[pallet::call_index(1)]
-        #[pallet::weight(T::WeightInfo::submit_proposal())]
-        pub fn submit_proposal(
-            origin: OriginFor<T>,
-            multisig_id: MultisigId,
-            call: Box<<T as Config>::RuntimeCall>,
-        ) -> DispatchResult {
-            // Check that the extrinsic was signed and get the signer.
-            let who = ensure_signed(origin)?;
-            // Ensure the multisig exists and that the signer is a valid owner.
-            let multisig = Self::multisigs(multisig_id).ok_or(Error::<T>::MultisigNotFound)?;
-            ensure!(multisig.owners.contains(&who), Error::<T>::NotAnOwner);
+			/// Generate a new, unique index for this proposal within the scope of the multisig.
+			let proposal_index = Self::next_proposal_index(multisig_id);
+			NextProposalIndex::<T>::insert(
+				multisig_id,
+				proposal_index.checked_add(1).ok_or(Error::<T>::StorageOverflow)?,
+			);
 
-            // Generate a new, unique index for this proposal within the scope of the multisig.
-            let proposal_index = Self::next_proposal_index(multisig_id);
-            NextProposalIndex::<T>::insert(
-                multisig_id,
-                proposal_index.checked_add(1).ok_or(Error::<T>::StorageOverflow)?,
-            );
+			/// Calculate the hash of the call for storage optimization instead of storing the full
+			/// call.
+			let call_hash = blake2_256(&call.encode());
+			let new_proposal = Proposal { call_hash, executed: false };
+			<Proposals<T>>::insert(multisig_id, proposal_index, new_proposal);
 
-            // Calculate the hash of the call for storage optimization instead of storing the full call.
-            let call_hash = blake2_256(&call.encode());
-            let new_proposal = Proposal { call_hash, executed: false };
-            <Proposals<T>>::insert(multisig_id, proposal_index, new_proposal);
+			/// The submitter automatically confirms their own proposal.
+			let mut approvals = BoundedVec::new();
+			approvals.try_push(who.clone()).map_err(|_| Error::<T>::TooManyOwners)?;
+			<Approvals<T>>::insert(multisig_id, proposal_index, approvals);
 
-            // The submitter automatically confirms their own proposal.
-            let mut approvals = BoundedVec::new();
-            approvals.try_push(who.clone()).map_err(|_| Error::<T>::TooManyOwners)?;
-            <Approvals<T>>::insert(multisig_id, proposal_index, approvals);
-
-            // Emit an event to notify users of the new proposal.
-            Self::deposit_event(Event::ProposalSubmitted { multisig_id, proposal_index, call_hash });
-            Ok(())
-        }
-    }
+			/// Emit an event to notify users of the new proposal.
+			Self::deposit_event(Event::ProposalSubmitted {
+				multisig_id,
+				proposal_index,
+				call_hash,
+			});
+			Ok(())
+		}
 	}
 
 	//HELPER FUNCTIONS
