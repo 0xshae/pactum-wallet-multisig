@@ -13,10 +13,8 @@ use sp_runtime::{
 type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
 
-// Configure a mock runtime to test the pallet.
 #[frame_construct_runtime]
 mod runtime {
-	/// The main runtime type.
 	#[runtime::runtime]
 	#[runtime::derive(
 		RuntimeCall,
@@ -31,23 +29,16 @@ mod runtime {
 	)]
 	pub struct Test;
 
-	/// Mandatory system pallet that should always be included in a FRAME runtime.
 	#[runtime::pallet_index(0)]
 	pub type System = frame_system::Pallet<Runtime>;
 
-	/// Provides the ability to keep track of balances.
 	#[runtime::pallet_index(1)]
 	pub type Balances = pallet_balances::Pallet<Runtime>;
 
-	/// Your custom pallet.
 	#[runtime::pallet_index(2)]
 	pub type Multisig = pallet_multisig::Pallet<Runtime>;
 }
 
-// Feel free to remove more items from this, as they are the same as
-// `frame_system::config_preludes::TestDefaultConfig`. We have only listed the full `type` list here
-// for verbosity. Same for `pallet_balances::Config`.
-// https://paritytech.github.io/polkadot-sdk/master/frame_support/attr.derive_impl.html
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
 impl frame_system::Config for Test {
 	type BaseCallFilter = frame_support::traits::Everything;
@@ -93,13 +84,12 @@ impl pallet_balances::Config for Test {
 
 impl pallet_multisig::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
-	type NativeBalance = Balances;
+	type Currency = Balances;
 	type RuntimeCall = RuntimeCall;
-	type RuntimeHoldReason = RuntimeHoldReason;
+	type MaxOwners = ConstU32<10>;
+	type WeightInfo = ();
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	// learn how to improve your test setup:
-	// https://paritytech.github.io/polkadot-sdk/master/polkadot_sdk_docs/guides/your_first_pallet/index.html
 	frame_system::GenesisConfig::<Test>::default().build_storage().unwrap().into()
 }
