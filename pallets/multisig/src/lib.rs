@@ -138,8 +138,11 @@ pub mod pallet {
 			proposal_index: ProposalIndex,
 			call_hash: [u8; 32],
 		},
-		Confirmation { who: T::AccountId, multisig_id: MultisigId, proposal_index: ProposalIndex },
-
+		Confirmation {
+			who: T::AccountId,
+			multisig_id: MultisigId,
+			proposal_index: ProposalIndex,
+		},
 	}
 
 	// ERRORS
@@ -157,8 +160,7 @@ pub mod pallet {
 		NotAnOwner,
 		ProposalNotFound,
 		AlreadyExecuted,
-		AlreadyConfirmed
-
+		AlreadyConfirmed,
 	}
 
 	//CALLS
@@ -275,28 +277,28 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(2)]
-        #[pallet::weight(T::WeightInfo::confirm_proposal())]
-        pub fn confirm_proposal(
-            origin: OriginFor<T>,
-            multisig_id: MultisigId,
-            proposal_index: ProposalIndex,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            let multisig = Self::multisigs(multisig_id).ok_or(Error::<T>::MultisigNotFound)?;
-            ensure!(multisig.owners.contains(&who), Error::<T>::NotAnOwner);
-            let proposal = Self::proposals(multisig_id, proposal_index).ok_or(Error::<T>::ProposalNotFound)?;
-            ensure!(!proposal.executed, Error::<T>::AlreadyExecuted);
+		#[pallet::weight(T::WeightInfo::confirm_proposal())]
+		pub fn confirm_proposal(
+			origin: OriginFor<T>,
+			multisig_id: MultisigId,
+			proposal_index: ProposalIndex,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			let multisig = Self::multisigs(multisig_id).ok_or(Error::<T>::MultisigNotFound)?;
+			ensure!(multisig.owners.contains(&who), Error::<T>::NotAnOwner);
+			let proposal =
+				Self::proposals(multisig_id, proposal_index).ok_or(Error::<T>::ProposalNotFound)?;
+			ensure!(!proposal.executed, Error::<T>::AlreadyExecuted);
 
-            let mut approvals = Self::approvals(multisig_id, proposal_index);
-            ensure!(!approvals.contains(&who), Error::<T>::AlreadyConfirmed);
+			let mut approvals = Self::approvals(multisig_id, proposal_index);
+			ensure!(!approvals.contains(&who), Error::<T>::AlreadyConfirmed);
 
-            approvals.try_push(who.clone()).map_err(|_| Error::<T>::TooManyOwners)?;
-            <Approvals<T>>::insert(multisig_id, proposal_index, approvals);
+			approvals.try_push(who.clone()).map_err(|_| Error::<T>::TooManyOwners)?;
+			<Approvals<T>>::insert(multisig_id, proposal_index, approvals);
 
-            Self::deposit_event(Event::Confirmation { who, multisig_id, proposal_index });
-            Ok(())
-        }
-
+			Self::deposit_event(Event::Confirmation { who, multisig_id, proposal_index });
+			Ok(())
+		}
 	}
 
 	//HELPER FUNCTIONS
