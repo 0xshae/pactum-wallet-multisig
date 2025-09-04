@@ -148,6 +148,7 @@ pub mod pallet {
 			proposal_index: ProposalIndex,
 			result: DispatchResult,
 		},
+		MultisigDestroyed { multisig_id: MultisigId },
 	}
 
 	// ERRORS
@@ -342,6 +343,25 @@ pub mod pallet {
 				proposal_index,
 				result: result.map(|_| ()).map_err(|e| e.error),
 			});
+			Ok(())
+		}
+
+		#[pallet::call_index(4)]
+		#[pallet::weight(T::WeightInfo::destroy_multisig())]
+		pub fn destroy_multisig(origin: OriginFor<T>, multisig_id: MultisigId) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			let multisig_account = Self::multi_account_id(multisig_id);
+
+			// Only the multisig's own sovereign account can destroy it.
+			ensure!(who == multisig_account, Error::<T>::MustBeMultisig);
+
+			// Clean up storage
+			<Multisigs<T>>::remove(multisig_id);
+			<NextProposalIndex<T>>::remove(multisig_id);
+			let _ = <Proposals<T>>::clear_prefix(multisig_id, u32::MAX, None);
+			let _ = <Approvals<T>>::clear_prefix(multisig_id, u32::MAX, None);
+
+			Self::deposit_event(Event::MultisigDestroyed { multisig_id });
 			Ok(())
 		}
 	}
