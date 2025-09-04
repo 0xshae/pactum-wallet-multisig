@@ -7,7 +7,9 @@
 
 use crate::{mock::*, Error, Event, Proposals};
 use codec::Encode;
-use frame_support::{assert_noop, assert_ok, BoundedVec, dispatch::DispatchResult, traits::Currency};
+use frame_support::{
+	assert_noop, assert_ok, dispatch::DispatchResult, traits::Currency, BoundedVec,
+};
 use sp_io::hashing::blake2_256;
 
 // --- TESTS FOR create_multisig ---
@@ -218,7 +220,8 @@ mod confirm_proposal {
 			));
 
 			// Assert
-			// Verify both the original proposer (1) and the new confirmer (2) are in the approvals list.
+			// Verify both the original proposer (1) and the new confirmer (2) are in the approvals
+			// list.
 			let expected_approvals: BoundedVec<u64, <Test as crate::Config>::MaxOwners> =
 				vec![1, 2].try_into().unwrap();
 			assert_eq!(Multisig::approvals(multisig_id, proposal_index), expected_approvals);
@@ -229,7 +232,8 @@ mod confirm_proposal {
 		});
 	}
 
-	/// Tests that the extrinsic fails if an owner tries to confirm a proposal they have already approved.
+	/// Tests that the extrinsic fails if an owner tries to confirm a proposal they have already
+	/// approved.
 	#[test]
 	fn fails_if_already_confirmed() {
 		new_test_ext().execute_with(|| {
@@ -278,11 +282,7 @@ mod confirm_proposal {
 
 			// Act & Assert: Another owner tries to confirm the now-executed proposal.
 			assert_noop!(
-				Multisig::confirm_proposal(
-					RuntimeOrigin::signed(2),
-					multisig_id,
-					proposal_index
-				),
+				Multisig::confirm_proposal(RuntimeOrigin::signed(2), multisig_id, proposal_index),
 				Error::<Test>::AlreadyExecuted
 			);
 		});
@@ -293,7 +293,8 @@ mod confirm_proposal {
 mod execute_proposal {
 	use super::*;
 
-	/// A helper function to set up a proposal that has met its threshold and is ready to be executed.
+	/// A helper function to set up a proposal that has met its threshold and is ready to be
+	/// executed.
 	fn setup_ready_to_execute_proposal() -> (u32, u32, RuntimeCall) {
 		let owners = vec![1, 2, 3];
 		let threshold = 2;
@@ -349,7 +350,8 @@ mod execute_proposal {
 			System::assert_last_event(
 				Event::ProposalExecuted { multisig_id, proposal_index, result }.into(),
 			);
-			// Verify that the inner call (`remark_with_event`) was actually dispatched by checking for its specific event.
+			// Verify that the inner call (`remark_with_event`) was actually dispatched by checking
+			// for its specific event.
 			let multisig_account = Multisig::multi_account_id(multisig_id);
 			let remark_hash = blake2_256(&vec![42]);
 			System::assert_has_event(
@@ -366,7 +368,8 @@ mod execute_proposal {
 	#[test]
 	fn fails_if_not_enough_approvals() {
 		new_test_ext().execute_with(|| {
-			// Arrange: A proposal is submitted but not confirmed, so it only has 1 approval, but needs 2.
+			// Arrange: A proposal is submitted but not confirmed, so it only has 1 approval, but
+			// needs 2.
 			let owners = vec![1, 2, 3];
 			let threshold = 2;
 			assert_ok!(Multisig::create_multisig(RuntimeOrigin::signed(1), owners, threshold));
@@ -392,7 +395,8 @@ mod execute_proposal {
 		});
 	}
 
-	/// Tests that the extrinsic fails if the provided call does not match the approved proposal's hash.
+	/// Tests that the extrinsic fails if the provided call does not match the approved proposal's
+	/// hash.
 	#[test]
 	fn fails_if_call_hash_mismatches() {
 		new_test_ext().execute_with(|| {
@@ -416,7 +420,6 @@ mod execute_proposal {
 	}
 }
 
-
 /// Tests for the `destroy_multisig` extrinsic.
 mod destroy_multisig {
 	use super::*;
@@ -433,8 +436,10 @@ mod destroy_multisig {
 			assert_ok!(Multisig::create_multisig(RuntimeOrigin::signed(1), owners, threshold));
 			let multisig_id = 0;
 
-			// Act: The owners must propose, confirm, and execute the destruction of their own wallet.
-			// 1. Propose the destruction. The call to be executed IS the destroy_multisig call itself.
+			// Act: The owners must propose, confirm, and execute the destruction of their own
+			// wallet.
+			// 1. Propose the destruction. The call to be executed IS the destroy_multisig call
+			//    itself.
 			let destroy_call: RuntimeCall = crate::Call::destroy_multisig { multisig_id }.into();
 			assert_ok!(Multisig::submit_proposal(
 				RuntimeOrigin::signed(1), // proposer
@@ -466,7 +471,8 @@ mod destroy_multisig {
 		});
 	}
 
-	/// Tests that the extrinsic fails if called directly by any account other than the multisig's own sovereign account.
+	/// Tests that the extrinsic fails if called directly by any account other than the multisig's
+	/// own sovereign account.
 	#[test]
 	fn fails_if_origin_is_not_sovereign_account() {
 		new_test_ext().execute_with(|| {
@@ -517,8 +523,7 @@ mod destroy_multisig {
 				proposal_index,
 				Box::new(destroy_call)
 			));
-			
-		
+
 			// The outer `execute_proposal` succeeds, but the inner `destroy_multisig` fails.
 			// We check that the `ProposalExecuted` event was emitted with the correct inner error.
 			let result: DispatchResult = Err(Error::<Test>::NonZeroBalance.into());

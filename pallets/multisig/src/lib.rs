@@ -21,8 +21,8 @@ pub use weight::WeightInfo;
 /// 1. **Creation:** A user creates a wallet with a set of owners and an approval threshold.
 /// 2. **Proposal:** An owner proposes a `RuntimeCall` for the group to approve.
 /// 3. **Confirmation:** Other owners confirm the proposal until the threshold is met.
-/// 4. **Execution:** Once the threshold is met, the proposal's `call` is dispatched from
-///    the wallet's own sovereign account.
+/// 4. **Execution:** Once the threshold is met, the proposal's `call` is dispatched from the
+///    wallet's own sovereign account.
 /// 5. **Destruction:** The wallet can be safely destroyed through a self-governed proposal,
 ///    ensuring all associated storage is cleaned up.
 #[frame_support::pallet]
@@ -135,7 +135,8 @@ pub mod pallet {
 
 	/// A counter for generating unique proposal indices for each multisig.
 	///
-	/// Each multisig maintains its own separate proposal count to keep indices small and manageable.
+	/// Each multisig maintains its own separate proposal count to keep indices small and
+	/// manageable.
 	#[pallet::storage]
 	#[pallet::getter(fn next_proposal_index)]
 	pub type NextProposalIndex<T: Config> =
@@ -230,7 +231,6 @@ pub mod pallet {
 		/// The multisig cannot be destroyed because it still holds a balance.
 		NonZeroBalance,
 	}
-
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -366,7 +366,7 @@ pub mod pallet {
 			proposal_index: ProposalIndex,
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			
+
 			// By checking conditions in this order (cheapest to most expensive), we can
 			// fail early and save computational resources if a condition is not met.
 			let multisig = Self::multisigs(multisig_id).ok_or(Error::<T>::MultisigNotFound)?;
@@ -497,7 +497,6 @@ pub mod pallet {
 	//HELPER FUNCTIONS
 	impl<T: Config> Pallet<T> {
 		/// Derives a unique, deterministic account ID for a multisig wallet.
-		///
 		// This function is the cornerstone of the stateful design. It uses the multisig's
 		// unique `seed` (its `MultisigId`) and a constant namespace to generate a 32-byte
 		// hash, which is then decoded into a valid `AccountId`. This allows the pallet
