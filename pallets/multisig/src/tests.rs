@@ -261,3 +261,128 @@ mod confirm_proposal {
 		});
 	}
 }
+
+mod execute_proposal {
+	use super::*;
+	use frame_support::dispatch::DispatchResult;
+
+	/// Helper function to set up a proposal that is ready to be executed.
+	/// Returns (multisig_id, proposal_index, call_to_execute).
+	fn setup_ready_to_execute_proposal() -> (u32, u32, RuntimeCall) {
+		let owners = vec![1, 2, 3];
+		let threshold = 2;
+		let proposer = 1;
+		let confirmer = 2;
+		let call: RuntimeCall = frame_system::Call::remark_with_event { remark: vec![42] }.into();
+
+		// Create the multisig
+		assert_ok!(Multisig::create_multisig(RuntimeOrigin::signed(proposer), owners, threshold));
+		let multisig_id = 0;
+
+		// Submit the proposal
+		assert_ok!(Multisig::submit_proposal(
+			RuntimeOrigin::signed(proposer),
+			multisig_id,
+			Box::new(call.clone())
+		));
+		let proposal_index = 0;
+
+		// Confirm the proposal to meet the threshold
+		assert_ok!(Multisig::confirm_proposal(
+			RuntimeOrigin::signed(confirmer),
+			multisig_id,
+			proposal_index
+		));
+
+		(multisig_id, proposal_index, call)
+	}
+
+	#[test]
+	fn it_executes_a_proposal_successfully() {
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+			let (multisig_id, proposal_index, call) = setup_ready_to_execute_proposal();
+			let executor = 4; // Anyone can execute
+
+			// Dispatch the extrinsic
+			assert_ok!(Multisig::execute_proposal(
+				RuntimeOrigin::signed(executor),
+				multisig_id,
+				proposal_index,
+				Box::new(call.clone())
+			));
+
+			// Verify storage: proposal should be marked as executed
+			let proposal = Multisig::proposals(multisig_id, proposal_index).unwrap();
+			assert!(proposal.executed);
+
+			// Verify event emission
+			let result: DispatchResult = Ok(().into());
+			System::assert_last_event(
+				Event::ProposalExecuted { multisig_id, proposal_index, result }.into(),
+			);
+
+			// Verify that the inner call (remark_with_event) was actually dispatched
+			// by checking for its specific event.
+			let multisig_account = Multisig::multi_account_id(multisig_id);
+			let remark_hash = blake2_256(&vec![42]);
+			System::assert_has_event(
+				frame_system::Event::Remarked {
+					sender: multisig_account,
+					hash: remark_hash.into(),
+				}
+				.into(),
+			);
+		});
+	}
+
+	#[test]
+	fn fails_if_not_enough_approvals() {
+		new_test_ext().execute_with(|| {
+			// Setup a multisig with a proposal, but don't confirm it enough
+			let owners = vec![1, 2, 3];
+			let threshold = 2; // Needs 2 approvals
+			assert_ok!(Multisig::create_multisig(RuntimeOrigin::signed(1), owners, threshold));
+			let multisig_id = 0;
+			let call: RuntimeCall = frame_system::Call::remark { remark: vec![] }.into();
+			assert_ok!(Multisig::submit_proposal(
+				RuntimeOrigin::signed(1),
+				multisig_id,
+				Box::new(call.clone())
+			));
+			let proposal_index = 0;
+
+			// Only 1 approval exists, but threshold is 2
+			assert_noop!(
+				Multisig::execute_proposal(
+					RuntimeOrigin::signed(1),
+					multisig_id,
+					proposal_index,
+					Box::new(call)
+				),
+				Error::<Test>::NotEnoughApprovals
+			);
+		});
+	}
+
+	#[test]
+	fn fails_if_call_hash_mismatches() {
+		new_test_ext().execute_with(|| {
+			let (multisig_id, proposal_index, _call) = setup_ready_to_execute_proposal();
+
+			// Create a different call to try and execute
+			let different_call: RuntimeCall =
+				frame_system::Call::remark { remark: vec![99] }.into();
+
+			assert_noop!(
+				Multisig::execute_proposal(
+					RuntimeOrigin::signed(1),
+					multisig_id,
+					proposal_index,
+					Box::new(different_call)
+				),
+				Error::<Test>::CallHashMismatch
+			);
+		});
+	}
+}

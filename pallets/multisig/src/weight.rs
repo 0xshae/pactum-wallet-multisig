@@ -10,6 +10,7 @@ pub trait WeightInfo {
     fn create_multisig() -> Weight;
     fn submit_proposal() -> Weight;
     fn confirm_proposal() -> Weight;
+    fn execute_proposal() -> Weight;
 }
 
 /// A dummy implementation for testing purposes.
@@ -25,6 +26,10 @@ impl WeightInfo for () {
     }
 
     fn confirm_proposal() -> Weight {
+        Weight::from_parts(20_000, 0)
+            .saturating_add(Weight::from_parts(150_000_000, 0))
+    }
+    fn execute_proposal() -> Weight {
         Weight::from_parts(20_000, 0)
             .saturating_add(Weight::from_parts(150_000_000, 0))
     }
