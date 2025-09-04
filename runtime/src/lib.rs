@@ -177,9 +177,10 @@ impl pallet_assets::Config for Runtime {
 /// Configure the pallet-multisig in pallets/multisig.
 impl pallet_multisig::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type NativeBalance = Balances;
+	type Currency = Balances;
 	type RuntimeCall = RuntimeCall;
-	type RuntimeHoldReason = RuntimeHoldReason;
+	type MaxOwners = ConstU32<100>; 
+	type WeightInfo = (); 
 }
 
 /// Configure the pallet-free-tx in pallets/free-tx.
