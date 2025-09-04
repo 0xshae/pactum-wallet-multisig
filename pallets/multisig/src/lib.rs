@@ -17,7 +17,11 @@ pub use weight::WeightInfo;
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
-	use frame_support::{dispatch::GetDispatchInfo, pallet_prelude::*, traits::ReservableCurrency};
+	use frame_support::{
+		dispatch::GetDispatchInfo,
+		pallet_prelude::*,
+		traits::{Currency, ReservableCurrency},
+	};
 	use frame_system::{pallet_prelude::*, RawOrigin};
 	use sp_io::hashing::blake2_256;
 	use sp_runtime::traits::{Dispatchable, TrailingZeroInput};
@@ -148,7 +152,9 @@ pub mod pallet {
 			proposal_index: ProposalIndex,
 			result: DispatchResult,
 		},
-		MultisigDestroyed { multisig_id: MultisigId },
+		MultisigDestroyed {
+			multisig_id: MultisigId,
+		},
 	}
 
 	// ERRORS
@@ -170,6 +176,7 @@ pub mod pallet {
 		MustBeMultisig,
 		CallHashMismatch,
 		NotEnoughApprovals,
+		NonZeroBalance,
 	}
 
 	//CALLS
@@ -333,7 +340,7 @@ pub mod pallet {
 			let result = call.dispatch(RawOrigin::Signed(multisig_account).into());
 
 			// Only mark as executed if the dispatch was successful
-			if result.is_ok() {
+			if result.is_ok() && <Multisigs<T>>::contains_key(multisig_id) {
 				proposal.executed = true;
 				<Proposals<T>>::insert(multisig_id, proposal_index, proposal);
 			}
@@ -354,6 +361,13 @@ pub mod pallet {
 
 			// Only the multisig's own sovereign account can destroy it.
 			ensure!(who == multisig_account, Error::<T>::MustBeMultisig);
+
+			// Ensure the multisig exists
+			let multisig = <Multisigs<T>>::get(multisig_id).ok_or(Error::<T>::MultisigNotFound)?;
+
+			// Ensure the multisig has no remaining balance
+			let balance = T::Currency::free_balance(&multisig_account);
+			ensure!(balance.is_zero(), Error::<T>::NonZeroBalance);
 
 			// Clean up storage
 			<Multisigs<T>>::remove(multisig_id);

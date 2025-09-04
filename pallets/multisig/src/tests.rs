@@ -1,6 +1,8 @@
 use crate::{mock::*, Error, Event, Proposals};
 use codec::Encode;
-use frame_support::{assert_noop, assert_ok, BoundedVec};
+use frame_support::{
+	assert_noop, assert_ok, dispatch::DispatchResult, traits::Currency, BoundedVec,
+};
 use sp_io::hashing::blake2_256;
 
 mod create_multisig {
@@ -302,7 +304,7 @@ mod execute_proposal {
 		new_test_ext().execute_with(|| {
 			System::set_block_number(1);
 			let (multisig_id, proposal_index, call) = setup_ready_to_execute_proposal();
-			let executor = 4; // Anyone can execute
+			let executor = 4;
 
 			// Dispatch the extrinsic
 			assert_ok!(Multisig::execute_proposal(
@@ -383,6 +385,106 @@ mod execute_proposal {
 				),
 				Error::<Test>::CallHashMismatch
 			);
+		});
+	}
+}
+
+mod destroy_multisig {
+	use super::*;
+
+	#[test]
+	fn it_destroys_a_multisig_successfully() {
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+
+			let owners = vec![1, 2, 3];
+			let threshold = 2;
+			assert_ok!(Multisig::create_multisig(RuntimeOrigin::signed(1), owners, threshold));
+			let multisig_id = 0;
+
+			let destroy_call: RuntimeCall = crate::Call::destroy_multisig { multisig_id }.into();
+			assert_ok!(Multisig::submit_proposal(
+				RuntimeOrigin::signed(1),
+				multisig_id,
+				Box::new(destroy_call.clone())
+			));
+			let proposal_index = 0;
+
+			assert_ok!(Multisig::confirm_proposal(
+				RuntimeOrigin::signed(2),
+				multisig_id,
+				proposal_index
+			));
+
+			assert_ok!(Multisig::execute_proposal(
+				RuntimeOrigin::signed(3),
+				multisig_id,
+				proposal_index,
+				Box::new(destroy_call)
+			));
+
+			assert!(Multisig::multisigs(multisig_id).is_none());
+			assert!(Multisig::proposals(multisig_id, proposal_index).is_none());
+			assert!(Multisig::approvals(multisig_id, proposal_index).is_empty());
+			assert_eq!(Multisig::next_proposal_index(multisig_id), 0);
+
+			System::assert_has_event(Event::MultisigDestroyed { multisig_id }.into());
+		});
+	}
+
+	#[test]
+	fn fails_if_origin_is_not_sovereign_account() {
+		new_test_ext().execute_with(|| {
+			let owners = vec![1, 2, 3];
+			let threshold = 2;
+			assert_ok!(Multisig::create_multisig(RuntimeOrigin::signed(1), owners, threshold));
+			let multisig_id = 0;
+
+			assert_noop!(
+				Multisig::destroy_multisig(RuntimeOrigin::signed(1), multisig_id),
+				Error::<Test>::MustBeMultisig
+			);
+		});
+	}
+
+	#[test]
+	fn fails_if_balance_is_not_zero() {
+		new_test_ext().execute_with(|| {
+			System::set_block_number(1);
+			let owners = vec![1, 2, 3];
+			let threshold = 2;
+			assert_ok!(Multisig::create_multisig(RuntimeOrigin::signed(1), owners, threshold));
+			let multisig_id = 0;
+			let multisig_account = Multisig::multi_account_id(multisig_id);
+
+			let _ = Balances::deposit_creating(&multisig_account, 100);
+
+			let destroy_call: RuntimeCall = crate::Call::destroy_multisig { multisig_id }.into();
+			assert_ok!(Multisig::submit_proposal(
+				RuntimeOrigin::signed(1),
+				multisig_id,
+				Box::new(destroy_call.clone())
+			));
+			let proposal_index = 0;
+			assert_ok!(Multisig::confirm_proposal(
+				RuntimeOrigin::signed(2),
+				multisig_id,
+				proposal_index
+			));
+
+			assert_ok!(Multisig::execute_proposal(
+				RuntimeOrigin::signed(3),
+				multisig_id,
+				proposal_index,
+				Box::new(destroy_call)
+			));
+
+			let result: DispatchResult = Err(Error::<Test>::NonZeroBalance.into());
+			System::assert_last_event(
+				Event::ProposalExecuted { multisig_id, proposal_index, result }.into(),
+			);
+
+			assert!(Multisig::multisigs(multisig_id).is_some());
 		});
 	}
 }
